@@ -41,12 +41,9 @@ static SEXP make_mutable(SEXP data)
 	error("mutable vectors for %s not supported yet", type2char(type));
     }
 
-    if (MAYBE_REFERENCED(data))
-	data = duplicate(data);
-    PROTECT(data);
-    SEXP ans = R_new_altrep(class, data, R_NilValue);
-    UNPROTECT(1); /* data */
-    return ans;
+    /* At this point 'data' may be shared, but only with other mutable
+       vectors. */
+    return R_new_altrep(class, data, R_NilValue);
 }
 
 #define MUTABLE_DATA(x) R_altrep_data1(x)
@@ -55,6 +52,12 @@ static SEXP make_mutable(SEXP data)
 /*
  * ALTREP Methods
  */
+
+static SEXP mutable_Duplicate(SEXP x, Rboolean deep)
+{
+    /* return a new mutable vector with the same data */
+    return make_mutable(MUTABLE_DATA(x));
+}
 
 Rboolean mutable_Inspect(SEXP x, int pre, int deep, int pvec,
 			 void (*inspect_subtree)(SEXP, int, int, int))
@@ -133,6 +136,7 @@ static void InitMutableIntegerClass(DllInfo *dll)
     mutable_integer_class = cls;
  
     /* override ALTREP methods */
+    R_set_altrep_Duplicate_method(cls, mutable_Duplicate);
     R_set_altrep_Inspect_method(cls, mutable_Inspect);
     R_set_altrep_Length_method(cls, mutable_Length);
 
@@ -152,6 +156,7 @@ static void InitMutableRealClass(DllInfo *dll)
     mutable_real_class = cls;
 
     /* override ALTREP methods */
+    R_set_altrep_Duplicate_method(cls, mutable_Duplicate);
     R_set_altrep_Inspect_method(cls, mutable_Inspect);
     R_set_altrep_Length_method(cls, mutable_Length);
 
@@ -171,7 +176,12 @@ static void InitMutableRealClass(DllInfo *dll)
 
 SEXP do_make_mutable(SEXP x)
 {
-    return make_mutable(x);
+    if (MAYBE_REFERENCED(x))
+	x = duplicate(x);
+    PROTECT(x);
+    SEXP ans = make_mutable(x);
+    UNPROTECT(1); /* x */
+    return ans;
 }
 
 SEXP do_is_mutable(SEXP x)
