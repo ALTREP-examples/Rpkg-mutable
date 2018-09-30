@@ -12,6 +12,7 @@ y <- x
 x[1] <- 1
 y
 ## [1] 1 0
+```
 
 Only the data part of the vector is mutable; attribute assignments
 obey standard R semantics:
