@@ -43,7 +43,14 @@ static SEXP make_mutable(SEXP data)
 
     /* At this point 'data' may be shared, but only with other mutable
        vectors. */
-    return R_new_altrep(class, data, R_NilValue);
+    SEXP val = R_new_altrep(class, data, R_NilValue);
+
+    /* The result is markes as not mutable so optimizations, in
+       particular in arithmetic operations, that re-use unreferenced
+       vectors don't do so with one of these. */
+    MARK_NOT_MUTABLE(val);
+
+    return val;
 }
 
 #define MUTABLE_DATA(x) R_altrep_data1(x)
