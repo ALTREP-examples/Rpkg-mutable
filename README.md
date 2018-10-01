@@ -56,5 +56,5 @@ attributes(y)
    vector sould be a good idea.
 
 - Possible additions (can be done at the R level):
-  - Allow specifying initial data in the 'mutable()` call.
+  - Allow specifying initial data in the `mutable()` call.
   - Add a `freeze` or `unmutable` function.
