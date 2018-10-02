@@ -177,17 +177,6 @@ avoid this issue but not the duplicate-and-modify issue. It would also
 force duplication of the `ALTREP` cell for any update operation.
 
 
-## Some Further Notes
-
-- Wrapper meta-data for mutables would also be a problem.
-- distinguish internally, externally mutable?
-    - explicitly mutable at the R level -- probably not viable for now
-    - standard R, but mutating may mutate external store (e.g. mmap)
-      - should be OK
-    - standard R, no mutation from R, but external mutation can happen
-      - no reliable meta data possible if external mutation might happen
-
-
 <!--
 Local Variables:
 mode: poly-markdown+R
