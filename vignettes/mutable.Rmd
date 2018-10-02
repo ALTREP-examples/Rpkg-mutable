@@ -3,71 +3,194 @@
 %\VignetteIndexEntry{Mutable Vectors in R}
 -->
 
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE)
+```
+
+
 # Mutable Vectors in R
 
-- mutables cause problems with arithmetic optimizations and maybe others
-- duplicate not necessarily producing a standard vector may also
-  - a test that rules out ALTREPs would do
-  - but we might want some ALTREPs to be re-usable
-  - maybe a Can_reuse method is needed?
-- duplicate-and-modify code won't work right -- how common is that?
-- wrapped mutables is also a problem
-- distinguish internally, externally mutable?
-  - explicitly mutable at the R level
-  - standard R, but mutating may mutate external store
-  - standard R, no mutation fro R, but external mutation can happen
+R vectors are conceptually immutable. Replacement functions create a
+modified copy of the original vector. So in this example the value of
+`y` is unchanged:
 
-provides an implementation of mutable vectors in R as a simple
-illustration of the `ALTREP` framework.
-
-A simple example:
 ```{r}
+x <- 1:3
+y <- x
+x[1] <- 7
+y
+```
+```{r, include = FALSE}
+stopifnot(y[1] == 1)
+```
+
+This computational model avoids many bugs that might occur with a pass
+by reference model, but it comes at the price of the overhead of
+duplicating objects before modifying them. R does try to avoid
+duplication when it can prove doing so is safe, but sometimes it
+cannot be voided.
+
+To avoid this potential overhead when initially building up an object,
+or to maintain state, it might be useful to have R vectors that are
+mutable, or have reference semantics, but otherwise behave like
+ordinary R vectors. S3 or S4 classes can be used to some extent to
+achieve this, but the resulting objects will not behave like ordinary
+R vectors in all respects, in particular at the `C` level.
+
+The `mutable` package was created to explore whether the `ALTREP`
+framework can be used to create mutable R vectors that behave
+properly. The answer seems to be no, at least at this point.
+
+
+## The `mutable` Package
+
+The `mutable` package provides an attempt to implement of mutable
+vectors in R using the `ALTREP` framework.
+
+Mutable vectors are created by `mutable`:
+```{r}
+library(mutable)  
 (x <- mutable("double", 2))
 y <- x
 x[1] <- 1
 y
 ```
+```{r, include = FALSE}
+stopifnot(x[1] == y[1]) 
+```
 
-Only the data part of the vector is mutable; attribute assignments
-obey standard R semantics:
+The data portions of `x` and `y` are shared, so modifying the data of
+`x` also modifies the data of `y`.  Only the data part of the vector
+is shared; attribute assignments obey standard R semantics:
 
 ```{r}
 attr(x, "foo") <- 1
 attributes(y)
 ```
+```{r, include = FALSE}
+stopifnot(is.null(attributes(y)))
+```
 
-## Some Notes
+The function `is.mutable` tests whether its argument was created by
+`mutable` (it does not allow for wrappers at this point).
 
-- For now, only `integer` and `double` vectors are supported. Other
-  atomic types shoud be easy to add. Support for `character` vectors
-  is also probably straight forward. Vectors of type `list` may be
-  more challenging as cycles need to be prevented.
+```{r}
+is.mutable(x)
+is.mutable(y)
+is.mutable(1:2)
+```
+```{r, include = FALSE}
+stopifnot(is.mutable(x), is.mutable(y), ! is.mutable(1:2))
+```
 
-- At the `C` level both deep and shallow duplicating preserves data
-  sharing. Internally the object uses a separate R vector for the
-  shared storage, but this vector should not be accessed outside the
-  package `C` code.
+Possible additions, that could be done at the R level:
 
-- There is no special serialization support: A mutable vector is
-  serialized as a standard unmutable vector. Sharing could be
-  preserved within a serialization by using an external pointer as an
-  interbediary.  It's not clear this would be worth while.
+- Allow specifying initial data in the `mutable()` call.
+- Add a `freeze` or `unmutable` function.
 
-- For now, mutable vectors are marked internally with
-  `MARK_NOT_MUTABLE` so optimizations, in particular in arithmetic
-  operations, that re-use unreferenced vectors don't re-use a mutable
-  vector. This means that attribute modifications may incur some
-  additional overhead. This could be avoided if the internal R re-use
-  code makes sure it was only re-using standard vectors. Of course
-  re-using a private memory-mapped vector might be OK, so maybe a
-  method to query whethr re-use is OK would be helpful.
 
- - There is no support for growing or shrinking a mutable vector.
-   Support along the lines of Common Lisp fill pointers could be
-   added. It's not clear whether integrating this with the growable
-   vector concept used when assigning beyond the current length of a
-   vector sould be a good idea.
+For now, only `integer` and `double` vectors are supported. Other
+atomic types shoud be easy to add. Support for `character` vectors is
+also probably straight forward. Vectors of type `list` may be more
+challenging as cycles need to be prevented.
 
-- Possible additions (can be done at the R level):
-  - Allow specifying initial data in the `mutable()` call.
-  - Add a `freeze` or `unmutable` function.
+There is no special serialization support: A mutable vector is
+serialized as a standard unmutable vector. Sharing could be preserved
+within a serialization by using an external pointer as an
+intermediary.  It's not clear this would be worth while.
+
+There is no support for growing or shrinking a mutable vector.
+Support along the lines of Common Lisp fill pointers could be
+added. It's not clear whether integrating this with the growable
+vector concept used when assigning beyond the current length of a
+vector sould be a good idea.
+
+At the `C` level both deep and shallow duplicating preserves data
+sharing. Internally the object uses a separate R vector for the shared
+storage, but this vector should not be accessed outside the package
+`C` code.
+
+
+## Problems
+
+The base R code is written for the standard immutable vector
+model. This leads to certain coding practices that are not compatible
+with allowing vectors to have mutable data. Most of these are based on
+the assumption that an object with `NO_REFERENCES` can be modified in
+place r re-used. Two particular practices are:
+
+- It is common at the `C` level to `duplicate` or `shallow_duplicate`
+  an object and then modify it.
+
+- In arithmetic operations in particular an argument with no
+  references may be re-used for the result to avoid allocating a
+  result vector.
+
+### Duplicate and Modify
+
+The duplicate and modify approach is This approach is based on the
+assumption that `duplicate` and `shallow_duplicate` vector that have
+no references and can be freely modified.  This approach is used in
+many unary operations, including unary minus:
+
+```{r}
+x <- mutable("double", 2); x[] <- 1:2
+-x
+x
+```
+
+The attempt to create a mutable vector by having the `Duplicate`
+method share the data portion violates the `duplicate` and
+`shallow_duplicate` and would require modifying base R code, and
+probably many packages, in many places to make it work properly.
+
+Addressing this issue would require every use of the duplicate and
+modify idiom to be replaced by allocating a new standard vector and
+copying data and attributes as needed. The effort would be
+significant. It would also loose the ability to automatically reuse
+`ALTREP` objects that is currently possible, unless we added a
+`Can_reuse` method to determine whether this is OK or not.
+	     
+
+### Value Re-Use
+
+Without re-use an arithmetic operation with a mutable vector would
+produce a standard vector result:
+
+```{r}
+x <- mutable("double", 2)
+is.mutable(x + 1)
+```
+
+But when the mutable vector has no references it maybe re-used as the result:
+
+```{r}
+is.mutable(mutable("double", 2) + 1)
+```
+
+Reusing an unreferenced mutable vector as a result can allow
+computations to unexpectedly produce mutable results, thus risking the
+bugs that the basic R design is intended to prevent.
+
+Marking the result produced by `mutable` as having references could
+avoid this issue but not the duplicate-and-modify issue. It would also
+force duplication of the `ALTREP` cell for any update operation.
+
+
+## Some Further Notes
+
+- Wrapper meta-data for mutables would also be a problem.
+- distinguish internally, externally mutable?
+    - explicitly mutable at the R level -- probably not viable for now
+    - standard R, but mutating may mutate external store (e.g. mmap)
+      - should be OK
+    - standard R, no mutation from R, but external mutation can happen
+      - no reliable meta data possible if external mutation might happen
+
+
+<!--
+Local Variables:
+mode: poly-markdown+R
+mode: flyspell
+End:
+-->
