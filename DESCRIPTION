@@ -6,3 +6,5 @@ Description: An implementation of mutable vectors using the ALTREP framework.
 Maintainer: Luke Tierney <luke-tierney@uiowa.edu>
 License: GPL-2 | GPL-3
 ByteCompile: yes
+Depends: R (>= 3.5)
+VignetteBuilder: knitr

@@ -1,39 +1,39 @@
+<!--
+%\VignetteEngine{knitr::rmarkdown}
+%\VignetteIndexEntry{Mutable Vectors in R}
+-->
+
 # Mutable Vectors in R
 
-
-   - mutables cause problems with arithmetic optimizations and maybe others
-  - duplicate not necessarily producing a standard vector may also
+- mutables cause problems with arithmetic optimizations and maybe others
+- duplicate not necessarily producing a standard vector may also
   - a test that rules out ALTREPs would do
   - but we might want some ALTREPs to be re-usable
   - maybe a Can_reuse method is needed?
-  - duplicate-and-modify code won't work right -- how common is that?
-  - wrapped mutables is also a problem
-  - distinguish internally, externally mutable?
-    - explicitly mutable at the R level
-    - standard R, but mutating may mutate external store
-    - standard R, no mutation fro R, but external mutation can happen
+- duplicate-and-modify code won't work right -- how common is that?
+- wrapped mutables is also a problem
+- distinguish internally, externally mutable?
+  - explicitly mutable at the R level
+  - standard R, but mutating may mutate external store
+  - standard R, no mutation fro R, but external mutation can happen
 
-     provides an implementation of mutable vectors in R as a
-simple illustration of the `ALTREP` framework.
+provides an implementation of mutable vectors in R as a simple
+illustration of the `ALTREP` framework.
 
 A simple example:
-```r
-x <- mutable("double", 2)
-x
-## [1] 0 0
+```{r}
+(x <- mutable("double", 2))
 y <- x
 x[1] <- 1
 y
-## [1] 1 0
 ```
 
 Only the data part of the vector is mutable; attribute assignments
 obey standard R semantics:
 
-```r
+```{r}
 attr(x, "foo") <- 1
 attributes(y)
-## NULL
 ```
 
 ## Some Notes
