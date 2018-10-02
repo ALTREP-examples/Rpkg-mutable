@@ -45,10 +45,13 @@ static SEXP make_mutable(SEXP data)
        vectors. */
     SEXP val = R_new_altrep(class, data, R_NilValue);
 
-    /* The result is markes as not mutable so optimizations, in
+#ifdef PREVENT_REUSE
+    /* The result is marked as not mutable so optimizations, in
        particular in arithmetic operations, that re-use unreferenced
-       vectors don't do so with one of these. */
+       vectors don't do so with one of these. THis doesn't help with
+       code that uses a duplicate-and-modify idiom. */
     MARK_NOT_MUTABLE(val);
+#endif
 
     return val;
 }
